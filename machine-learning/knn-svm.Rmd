@@ -1,0 +1,148 @@
+---
+title: 'Prostate Cancer Detection: classification using K-NN, SVM'
+output:
+  html_document: default
+  html_notebook: default
+---
+
+### Introduction: The notebook illustrates implementing SVM and KNN in R. The dataset used here can be found at: https://vincentarelbundock.github.io/Rdatasets/datasets.html
+
+```{r}
+
+library(caret)
+library(plyr)
+
+dataset <- read.csv("~/Prostate_Cancer.csv",stringsAsFactors = FALSE)
+str(dataset)
+```
+
+### Data Cleaning:
+#### We remove the first ID column from the dataset
+
+```{r}
+dataset <- dataset[-1]
+```
+
+#### diagnosis_result is the response categorical variable we want to predict with levels malignant or benign
+
+```{r}
+table(dataset$diagnosis_result)
+dataset$diagnosis <- factor(dataset$diagnosis_result, levels = c("B","M"), label = c("Benign","Malignant"))
+round(prop.table(table(dataset$diagnosis))*100, digits =1)
+```
+
+### Normalizing the numeric data
+
+```{r}
+normalize <- function(x) {
+  return ((x - min(x)) / (max(x) - min(x))) }
+data_n <- as.data.frame(lapply(dataset[2:9], normalize))
+```
+
+
+####The first variable in our data set (after removal of id) is 'diagnosis_result' which is not numeric in nature. So, we start from 2nd variable. The function lapply() applies normalize() to each feature in the data frame. The final result is stored to prc_n data frame using as.data.frame() function
+
+#### Let's check using the variable 'radius' whether the data has been normalized. 
+
+```{r}
+summary(data_n$radius)
+```
+
+### Creating Training and test data set
+#### The kNN algorithm is applied to the training data set and the results are verified on the test data set.
+
+#### For this, we would  divide the data set into 2 portions in the ratio of 65: 35 (assumed) for the training and test data set respectively. You may use a different ratio altogether depending on the business requirement!
+ 
+####   We shall divide the prc_n data frame into prc_train and prc_test data frames
+
+```{r}
+data_train <- data_n[1:65,]
+data_test <- data_n[66:100,]
+```
+
+#### A blank value in each of the above statements indicate that all rows and columns should be included.
+#### Our target variable is 'diagnosis_result' which we have not included in our training and test data sets.
+
+```{r}
+data_train_labels <- dataset[1:65, 1]
+data_test_labels <- dataset[66:100, 1]   ###This code takes the diagnosis factor in column 1 of the prc data frame and on turn creates prc_train_labels and prc_test_labels data frame.
+```
+
+
+#### Training a model on data
+
+#### The knn () function needs to be used to train a model for which we need to install a package 'class'. The knn() function identifies the k-nearest neighbors using Euclidean distance where k is a user-specified number.
+
+#### You need to type in the following commands to use knn()
+
+```{r}
+# install.packages("class")
+library(class)
+
+### Now we are ready to use the knn() function to classify test data
+
+data_test_pred <- knn(train = data_train, test = data_test,cl = data_train_labels, k=7)
+```
+
+
+#### The value for k is generally chosen as the square root of the number of observations.
+
+#### knn() returns a factor value of predicted labels for each of the examples in the test data set which is then assigned to the data frame prc_test_pred
+
+### Evaluate model performance
+ 
+#### We have built the model but we also need to check the accuracy of the predicted values in prc_test_pred as to whether they match up with the known values in prc_test_labels. To ensure this, we need to use the CrossTable() function available in the package 'gmodels'.
+
+```{r}
+# install.packages("gmodels")
+library(gmodels)
+
+CrossTable(x = data_test_labels, y = data_test_pred, prop.chisq = FALSE)
+```
+
+
+#### The test data consisted of 35 observations. Out of which 5 cases have been accurately predicted (TN->True Negatives) as Benign (B) in nature which constitutes 14.3%. Also, 16 out of 35 observations were accurately predicted (TP-> True Positives) as Malignant (M) in nature which constitutes 45.7%. Thus a total of 16 out of 35 predictions where TP i.e, True Positive in nature.
+
+#### There were no cases of False Negatives (FN) meaning no cases were recorded which actually are malignant in nature but got predicted as benign. The FN's if any poses a potential threat for the same reason and the main focus to increase the accuracy of the model is to reduce FN's.
+
+#### There were 14 cases of False Positives (FP) meaning 14 cases were actually benign in nature but got predicted as malignant.
+
+#### The total accuracy of the model is 60 %( (TN+TP)/35) which shows that there may be chances to improve the model performance
+
+
+
+
+### Improve Model Performance
+
+#### This can be taken into account by repeating the steps 3 and 4 and by changing the k-value. Generally, it is the square root of the observations and in this case we took k=10 which is a perfect square root of 100.The k-value may be fluctuated in and around the value of 10 to check the increased accuracy of the model. Do try it out with values of your choice to increase the accuracy! Also remember, to keep the value of FN's as low as possible.
+```{r}
+trainset <- cbind(data_train, data_train_labels)
+testset <- cbind(data_test, data_test_labels)
+colnames(trainset) <- c("radius","texture","perimeter","area","smoothness","compactness","symmetry","fractal_dimension","diagnosis") 
+colnames(testset) <- c("radius","texture","perimeter","area","smoothness","compactness","symmetry","fractal_dimension","diagnosis") 
+
+
+
+# install.packages("e1071")
+library("e1071")
+svm_model <- svm(diagnosis ~ ., data=trainset)
+
+
+summary(svm_model)
+
+pred <- predict(svm_model, testset)
+table(pred, testset[,9])
+
+
+svm_tune <- tune(svm, train.x = trainset[,-9], train.y = trainset[,9],kernel="radial", ranges=list(cost=10^(-1:2), gamma=c(.5,1,2)))
+
+print(svm_tune)
+
+svm_model_after_tune <- svm(diagnosis ~ ., data=trainset, kernel="radial", cost=1, gamma=0.5)
+summary(svm_model_after_tune)
+
+
+pred <- predict(svm_model_after_tune,testset)
+table(pred, testset[,9])
+
+```

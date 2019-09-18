@@ -1,0 +1,67 @@
+---
+title: "Gradient Boosting in R"
+output: html_notebook
+---
+
+
+```{r, echo = FALSE}
+# Step 1: Import standard libraries 
+library(caret)
+library(dplyr)
+```
+
+```{r, echo = TRUE}
+# Step 2: Load and Prepare Data
+news.data <- read.csv('~/Documents/extras/github-projects/r notebooks/Online News Popularity/OnlineNewsPopularity.csv')
+head(news.data)
+```
+
+```{r, echo = T}
+# check dimensions of the dataframe
+dim(news.data)
+```
+
+```{r, echo = T}
+# check data types of the dataframe
+str(news.data)
+```
+
+```{r}
+# Seperate Target and Training Features
+# 
+# y <- news.data['shares']
+# x <- subset(news.data, select = -(shares))
+
+```
+
+```{r}
+# Split data into training and testing sets
+set.seed(123)
+intrain <- createDataPartition(news.data$shares, p = 0.7, list = F)
+training.data <- news.data[intrain,]
+testing.data <- news.data[-intrain,]
+```
+
+```{r}
+# Data Pre-processing
+
+# Since features are on different scales, standardizing them by subtracting the means and dividing by the standard deviation
+
+norm.param <- preProcess(training.data)
+training.data <- predict(norm.param, training.data)
+testing.data <- predict(norm.param, testing.data)
+
+```
+
+```{r}
+# Fit random forest to training data
+library(randomForest)
+
+control <- trainControl(method="repeatedcv", number=10, repeats=3)
+metric <- "Accuracy"
+set.seed(123)
+mtry <- floor(sqrt(ncol(training.data)))
+rf.default <- train(shares~., data=training.data, method="rf", tuneGrid=expand.grid(.mtry=mtry), trControl=control)
+print(rf.default)
+```
+
