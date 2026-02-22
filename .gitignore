@@ -3,3 +3,5 @@
 *.xls
 *.pdf
 stock-monitoring-app/yahoo_http_cache.sqlite
+__pycache__/
+*.pyc
