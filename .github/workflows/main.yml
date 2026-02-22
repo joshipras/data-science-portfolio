@@ -10,6 +10,9 @@ jobs:
     permissions:
       contents: write
     runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: stock-monitoring-app
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -29,9 +32,9 @@ jobs:
 
       - name: Select Monitor Mode
         run: |
-          if [ "${GITHUB_REF_NAME}" = "main" ]; then
+          if [ "${GITHUB_REF_NAME}" = "master" ] || [ "${GITHUB_REF_NAME}" = "main" ]; then
             echo "MONITOR_ARGS=" >> "$GITHUB_ENV"
-            echo "Running live alert mode on main."
+            echo "Running live alert mode on ${GITHUB_REF_NAME}."
           else
             echo "MONITOR_ARGS=--dry-run" >> "$GITHUB_ENV"
             echo "Running dry-run mode on branch: ${GITHUB_REF_NAME}"
@@ -68,7 +71,7 @@ jobs:
         run: python monitor_tqqq.py $MONITOR_ARGS
 
       - name: Commit status.json
-        if: success() && github.ref_name == 'main'
+        if: success() && (github.ref_name == 'master' || github.ref_name == 'main')
         run: |
           git config user.name "GitHub Action"
           git config user.email "action@github.com"
