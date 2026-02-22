@@ -35,6 +35,16 @@ def clean_env_value(value: str | None) -> str | None:
     return cleaned or None
 
 
+def parse_int_env(var_name: str, default: int) -> int:
+    raw = clean_env_value(os.getenv(var_name))
+    if not raw:
+        return default
+    try:
+        return int(raw)
+    except ValueError:
+        return default
+
+
 def build_cached_session():
     if requests_cache is None:
         # Fallback when requests-cache is not installed in minimal deployments.
@@ -289,7 +299,7 @@ def send_primary_email_alert(subject: str, body_text: str, body_html: str) -> No
     email_user = clean_env_value(os.getenv("EMAIL_USER"))
     email_pass = clean_env_value(os.getenv("EMAIL_PASS")) or clean_env_value(os.getenv("EMAIL_APP_PASSWORD"))
     smtp_server = os.getenv("SMTP_SERVER", "smtp.gmail.com")
-    smtp_port = int(os.getenv("SMTP_PORT", "587"))
+    smtp_port = parse_int_env("SMTP_PORT", 587)
     recipient = clean_env_value(os.getenv("ALERT_EMAIL_TO")) or clean_env_value(os.getenv("EMAIL_TO")) or email_user
 
     # Gmail app passwords are often copied in grouped chunks like "abcd efgh ijkl mnop".
