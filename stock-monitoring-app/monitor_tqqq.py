@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import random
 import requests
 import smtplib
 import time
@@ -383,20 +384,13 @@ def evaluate_alerts(snapshot: dict, status_path: Path, dry_run: bool = False, fo
     status = load_status(status_path)
     monitor = status.get("monitor_state", {})
 
-    below_streak = int(monitor.get("below_streak", 0))
-    dip_alert_active = bool(monitor.get("dip_alert_active", False))
     prev_state = monitor.get("last_state", "UNKNOWN")
     state = snapshot["state"]
+    state_changed = state != prev_state
 
-    if state == "BELOW_THRESHOLD":
-        below_streak += 1
-    else:
-        below_streak = 0
-
-    should_send_dip = (state == "BELOW_THRESHOLD" and below_streak >= 2 and not dip_alert_active) or (
-        force_notify and state == "BELOW_THRESHOLD"
-    )
-    should_send_recovery = (state == "ABOVE_SMA" and dip_alert_active) or (force_notify and state == "ABOVE_SMA")
+    # Muzzle rule: only notify on transitions, except explicit forced tests.
+    should_send_dip = (state_changed and state == "BELOW_THRESHOLD") or (force_notify and state == "BELOW_THRESHOLD")
+    should_send_recovery = (state_changed and state == "ABOVE_SMA") or (force_notify and state == "ABOVE_SMA")
 
     if should_send_dip:
         subject = "[TQQQ] Dip Alert (confirmed across 2 runs)"
@@ -431,7 +425,6 @@ def evaluate_alerts(snapshot: dict, status_path: Path, dry_run: bool = False, fo
                 send_primary_email_alert(subject, body_text, body_html)
             except Exception as exc:
                 print(f"Warning: secondary email send failed (dip alert): {exc}")
-        dip_alert_active = True
     elif should_send_recovery:
         subject = "[TQQQ] Recovery Alert: crossed back above 200 SMA"
         body_text = (
@@ -465,14 +458,15 @@ def evaluate_alerts(snapshot: dict, status_path: Path, dry_run: bool = False, fo
                 send_primary_email_alert(subject, body_text, body_html)
             except Exception as exc:
                 print(f"Warning: secondary email send failed (recovery alert): {exc}")
-        dip_alert_active = False
     else:
-        print("No alert conditions matched for this run.")
+        if state == "BELOW_THRESHOLD" and not state_changed:
+            print("No new alert: state remains BELOW_THRESHOLD (muzzle active).")
+        else:
+            print("No alert conditions matched for this run.")
 
     status["monitor_state"] = {
         "last_state": state,
-        "below_streak": below_streak,
-        "dip_alert_active": dip_alert_active,
+        "last_state_changed": state_changed,
         "last_price": snapshot["price"],
         "last_sma_200": snapshot["sma_200"],
         "last_threshold": snapshot["dip_threshold"],
@@ -509,13 +503,7 @@ def run_once(symbol: str, status_file: Path, dry_run: bool = False, force_dip_te
         f"rows={len(hist) if hist is not None else 'n/a'} | state={snapshot['state']}"
     )
     if force_dip_test:
-        status = load_status(status_file)
-        monitor = status.get("monitor_state", {})
-        monitor["below_streak"] = 1
-        monitor["dip_alert_active"] = False
-        status["monitor_state"] = monitor
-        save_status(status_file, status)
-        print("Force dip test mode: seeded confirmation state, triggering immediate dip-confirmation path.")
+        print("Force dip test mode: bypassing transition muzzle for notification test.")
     evaluate_alerts(snapshot, status_file, dry_run=dry_run, force_notify=force_dip_test)
 
 
@@ -536,6 +524,11 @@ def parse_args() -> argparse.Namespace:
 def main() -> None:
     args = parse_args()
     effective_dry_run = args.dry_run or args.test
+    # Rate-limit resilience: add startup jitter to avoid synchronized request bursts.
+    if not effective_dry_run and not args.force_dip_test:
+        delay = random.randint(0, 30)
+        print(f"Startup jitter: sleeping {delay}s before market fetch.")
+        time.sleep(delay)
     run_once(
         symbol=args.symbol,
         status_file=Path(args.status_file),
