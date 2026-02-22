@@ -1,0 +1,16 @@
+{
+  "state": "BELOW",
+  "last_price": 45.9,
+  "sma_200": 47.522126,
+  "dip_threshold": 46.09646222,
+  "updated_at_utc": "2026-02-22T00:31:34.809619Z",
+  "monitor_state": {
+    "last_state": "BELOW_THRESHOLD",
+    "below_streak": 2,
+    "dip_alert_active": true,
+    "last_price": 45.86597990890001,
+    "last_sma_200": 47.52212600000001,
+    "last_threshold": 46.09646222000001,
+    "updated_at_utc": "2026-02-22T20:00:08.722015Z"
+  }
+}
