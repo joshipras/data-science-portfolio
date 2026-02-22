@@ -2,3 +2,4 @@
 *.xlsx
 *.xls
 *.pdf
+stock-monitoring-app/yahoo_http_cache.sqlite
