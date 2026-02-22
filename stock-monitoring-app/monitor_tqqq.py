@@ -150,7 +150,6 @@ def fetch_from_yahoo_chart_with_curl(symbol: str, lookback_days: int, chrome_ses
 
 
 def fetch_market_snapshot(symbol: str, lookback_days: int = 250) -> tuple[dict, pd.DataFrame]:
-    cached_session = build_cached_session()
     chrome_session = build_curl_session()
 
     # Retry backoff waits: 2s, 4s, 8s. First attempt has no wait.
@@ -162,15 +161,18 @@ def fetch_market_snapshot(symbol: str, lookback_days: int = 250) -> tuple[dict, 
             time.sleep(wait_seconds)
 
         try:
-            hist = yf.download(
-                symbol,
-                period=f"{lookback_days}d",
-                interval="1d",
-                auto_adjust=False,
-                progress=False,
-                threads=False,
-                session=cached_session,
-            )
+            download_kwargs = {
+                "period": f"{lookback_days}d",
+                "interval": "1d",
+                "auto_adjust": False,
+                "progress": False,
+                "threads": False,
+            }
+            # Newer yfinance versions require a curl_cffi session type if session is provided.
+            # Do not pass a plain requests session to avoid YFDataException in CI.
+            if chrome_session is not None:
+                download_kwargs["session"] = chrome_session
+            hist = yf.download(symbol, **download_kwargs)
             if hist.empty:
                 yf_error = str(yf_shared._ERRORS.get(symbol, "")).strip()
                 if yf_error:
