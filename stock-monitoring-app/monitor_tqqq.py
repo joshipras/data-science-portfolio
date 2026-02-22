@@ -45,6 +45,11 @@ def parse_int_env(var_name: str, default: int) -> int:
         return default
 
 
+def parse_str_env(var_name: str, default: str) -> str:
+    value = clean_env_value(os.getenv(var_name))
+    return value or default
+
+
 def build_cached_session():
     if requests_cache is None:
         # Fallback when requests-cache is not installed in minimal deployments.
@@ -298,7 +303,7 @@ def save_status(path: Path, status: dict) -> None:
 def send_primary_email_alert(subject: str, body_text: str, body_html: str) -> None:
     email_user = clean_env_value(os.getenv("EMAIL_USER"))
     email_pass = clean_env_value(os.getenv("EMAIL_PASS")) or clean_env_value(os.getenv("EMAIL_APP_PASSWORD"))
-    smtp_server = os.getenv("SMTP_SERVER", "smtp.gmail.com")
+    smtp_server = parse_str_env("SMTP_SERVER", "smtp.gmail.com")
     smtp_port = parse_int_env("SMTP_PORT", 587)
     recipient = clean_env_value(os.getenv("ALERT_EMAIL_TO")) or clean_env_value(os.getenv("EMAIL_TO")) or email_user
 
@@ -332,7 +337,9 @@ def send_primary_email_alert(subject: str, body_text: str, body_html: str) -> No
 
     try:
         with smtplib.SMTP(smtp_server, smtp_port, timeout=20) as server:
+            server.ehlo()
             server.starttls()
+            server.ehlo()
             server.login(email_user, email_pass)
             server.send_message(msg)
     except smtplib.SMTPAuthenticationError as exc:
@@ -340,6 +347,8 @@ def send_primary_email_alert(subject: str, body_text: str, body_html: str) -> No
             "SMTP authentication failed. For Gmail, use an App Password (not your normal password), "
             "and ensure 2-Step Verification is enabled on the sender account."
         ) from exc
+    except smtplib.SMTPException as exc:
+        raise RuntimeError(f"SMTP send failed: {exc}") from exc
 
 
 def send_push(title: str, message: str, priority: int = 0, dry_run: bool = False) -> None:
@@ -418,7 +427,10 @@ def evaluate_alerts(snapshot: dict, status_path: Path, dry_run: bool = False, fo
             # Primary immediate alert path.
             send_push(title=subject, message=push_message, priority=2, dry_run=False)
             # Secondary log/archive path.
-            send_primary_email_alert(subject, body_text, body_html)
+            try:
+                send_primary_email_alert(subject, body_text, body_html)
+            except Exception as exc:
+                print(f"Warning: secondary email send failed (dip alert): {exc}")
         dip_alert_active = True
     elif should_send_recovery:
         subject = "[TQQQ] Recovery Alert: crossed back above 200 SMA"
@@ -449,7 +461,10 @@ def evaluate_alerts(snapshot: dict, status_path: Path, dry_run: bool = False, fo
             # Primary immediate alert path.
             send_push(title=subject, message=push_message, priority=0, dry_run=False)
             # Secondary log/archive path.
-            send_primary_email_alert(subject, body_text, body_html)
+            try:
+                send_primary_email_alert(subject, body_text, body_html)
+            except Exception as exc:
+                print(f"Warning: secondary email send failed (recovery alert): {exc}")
         dip_alert_active = False
     else:
         print("No alert conditions matched for this run.")
