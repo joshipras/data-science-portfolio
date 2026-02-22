@@ -173,6 +173,35 @@ def fetch_market_snapshot(symbol: str, lookback_days: int = 250) -> tuple[dict, 
             if chrome_session is not None:
                 download_kwargs["session"] = chrome_session
             hist = yf.download(symbol, **download_kwargs)
+
+            # Normalize yfinance output shape across versions/providers.
+            if isinstance(hist.columns, pd.MultiIndex):
+                # Prefer top-level OHLC names when possible.
+                if "Close" in hist.columns.get_level_values(0):
+                    hist = hist.copy()
+                    hist.columns = [col[0] for col in hist.columns]
+                else:
+                    hist = hist.copy()
+                    hist.columns = [str(col[-1]) for col in hist.columns]
+            else:
+                hist = hist.copy()
+
+            # Some responses use lowercase or ticker-qualified names.
+            rename_candidates = {
+                "open": "Open",
+                "high": "High",
+                "low": "Low",
+                "close": "Close",
+                f"{symbol.upper()}_OPEN": "Open",
+                f"{symbol.upper()}_HIGH": "High",
+                f"{symbol.upper()}_LOW": "Low",
+                f"{symbol.upper()}_CLOSE": "Close",
+            }
+            hist.rename(columns={k: v for k, v in rename_candidates.items() if k in hist.columns}, inplace=True)
+
+            if "Close" not in hist.columns:
+                raise RuntimeError(f"Yahoo response missing Close column. Columns: {list(hist.columns)[:10]}")
+
             if hist.empty:
                 yf_error = str(yf_shared._ERRORS.get(symbol, "")).strip()
                 if yf_error:
