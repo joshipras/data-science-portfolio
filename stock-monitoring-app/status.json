@@ -7,9 +7,9 @@
   "monitor_state": {
     "last_state": "ABOVE_SMA",
     "last_state_changed": false,
-    "last_price": 51.869998931884766,
-    "last_sma_200": 47.87434991836548,
-    "last_threshold": 46.438119420814516,
-    "updated_at_utc": "2026-02-26T15:31:36.909766Z"
+    "last_price": 49.74689865112305,
+    "last_sma_200": 47.975659408569335,
+    "last_threshold": 46.53638962631226,
+    "updated_at_utc": "2026-02-26T16:36:54.225855Z"
   }
 }
