@@ -6,10 +6,11 @@
   "updated_at_utc": "2026-02-22T00:31:34.809619Z",
   "monitor_state": {
     "last_state": "ABOVE_SMA",
-    "last_state_changed": false,
-    "last_price": 49.525001525878906,
-    "last_sma_200": 48.05952491760254,
-    "last_threshold": 46.61773917007446,
-    "updated_at_utc": "2026-02-27T17:02:54.309654Z"
+    "below_streak": 0,
+    "dip_alert_active": false,
+    "last_price": 605.5700073242188,
+    "last_sma_200": 586.65169921875,
+    "last_threshold": 569.0521482421874,
+    "updated_at_utc": "2026-02-27T17:24:01.242668Z"
   }
 }
