@@ -150,7 +150,6 @@ def fetch_from_yahoo_chart_with_curl(symbol: str, lookback_days: int, chrome_ses
 
 
 def fetch_market_snapshot(symbol: str, lookback_days: int = 250) -> tuple[dict, pd.DataFrame]:
-    cached_session = build_cached_session()
     chrome_session = build_curl_session()
 
     # Retry backoff waits: 2s, 4s, 8s. First attempt has no wait.
@@ -162,15 +161,43 @@ def fetch_market_snapshot(symbol: str, lookback_days: int = 250) -> tuple[dict, 
             time.sleep(wait_seconds)
 
         try:
-            hist = yf.download(
-                symbol,
-                period=f"{lookback_days}d",
-                interval="1d",
-                auto_adjust=False,
-                progress=False,
-                threads=False,
-                session=cached_session,
-            )
+            download_kwargs = {
+                "period": f"{lookback_days}d",
+                "interval": "1d",
+                "auto_adjust": False,
+                "progress": False,
+                "threads": False,
+            }
+            # New yfinance versions reject plain requests sessions when passed via session=.
+            if chrome_session is not None:
+                download_kwargs["session"] = chrome_session
+            hist = yf.download(symbol, **download_kwargs)
+
+            # Normalize yfinance output shape across versions/providers.
+            if isinstance(hist.columns, pd.MultiIndex):
+                if "Close" in hist.columns.get_level_values(0):
+                    hist = hist.copy()
+                    hist.columns = [col[0] for col in hist.columns]
+                else:
+                    hist = hist.copy()
+                    hist.columns = [str(col[-1]) for col in hist.columns]
+            else:
+                hist = hist.copy()
+
+            rename_candidates = {
+                "open": "Open",
+                "high": "High",
+                "low": "Low",
+                "close": "Close",
+                f"{symbol.upper()}_OPEN": "Open",
+                f"{symbol.upper()}_HIGH": "High",
+                f"{symbol.upper()}_LOW": "Low",
+                f"{symbol.upper()}_CLOSE": "Close",
+            }
+            hist.rename(columns={k: v for k, v in rename_candidates.items() if k in hist.columns}, inplace=True)
+            if "Close" not in hist.columns:
+                raise RuntimeError(f"Yahoo response missing Close column. Columns: {list(hist.columns)[:10]}")
+
             if hist.empty:
                 yf_error = str(yf_shared._ERRORS.get(symbol, "")).strip()
                 if yf_error:
