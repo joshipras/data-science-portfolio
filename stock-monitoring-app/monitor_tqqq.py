@@ -3,7 +3,6 @@ from __future__ import annotations
 import argparse
 import json
 import os
-import random
 import requests
 import smtplib
 import time
@@ -34,21 +33,6 @@ def clean_env_value(value: str | None) -> str | None:
         return None
     cleaned = value.strip().strip('"').strip("'").strip()
     return cleaned or None
-
-
-def parse_int_env(var_name: str, default: int) -> int:
-    raw = clean_env_value(os.getenv(var_name))
-    if not raw:
-        return default
-    try:
-        return int(raw)
-    except ValueError:
-        return default
-
-
-def parse_str_env(var_name: str, default: str) -> str:
-    value = clean_env_value(os.getenv(var_name))
-    return value or default
 
 
 def build_cached_session():
@@ -166,6 +150,7 @@ def fetch_from_yahoo_chart_with_curl(symbol: str, lookback_days: int, chrome_ses
 
 
 def fetch_market_snapshot(symbol: str, lookback_days: int = 250) -> tuple[dict, pd.DataFrame]:
+    cached_session = build_cached_session()
     chrome_session = build_curl_session()
 
     # Retry backoff waits: 2s, 4s, 8s. First attempt has no wait.
@@ -177,47 +162,15 @@ def fetch_market_snapshot(symbol: str, lookback_days: int = 250) -> tuple[dict, 
             time.sleep(wait_seconds)
 
         try:
-            download_kwargs = {
-                "period": f"{lookback_days}d",
-                "interval": "1d",
-                "auto_adjust": False,
-                "progress": False,
-                "threads": False,
-            }
-            # Newer yfinance versions require a curl_cffi session type if session is provided.
-            # Do not pass a plain requests session to avoid YFDataException in CI.
-            if chrome_session is not None:
-                download_kwargs["session"] = chrome_session
-            hist = yf.download(symbol, **download_kwargs)
-
-            # Normalize yfinance output shape across versions/providers.
-            if isinstance(hist.columns, pd.MultiIndex):
-                # Prefer top-level OHLC names when possible.
-                if "Close" in hist.columns.get_level_values(0):
-                    hist = hist.copy()
-                    hist.columns = [col[0] for col in hist.columns]
-                else:
-                    hist = hist.copy()
-                    hist.columns = [str(col[-1]) for col in hist.columns]
-            else:
-                hist = hist.copy()
-
-            # Some responses use lowercase or ticker-qualified names.
-            rename_candidates = {
-                "open": "Open",
-                "high": "High",
-                "low": "Low",
-                "close": "Close",
-                f"{symbol.upper()}_OPEN": "Open",
-                f"{symbol.upper()}_HIGH": "High",
-                f"{symbol.upper()}_LOW": "Low",
-                f"{symbol.upper()}_CLOSE": "Close",
-            }
-            hist.rename(columns={k: v for k, v in rename_candidates.items() if k in hist.columns}, inplace=True)
-
-            if "Close" not in hist.columns:
-                raise RuntimeError(f"Yahoo response missing Close column. Columns: {list(hist.columns)[:10]}")
-
+            hist = yf.download(
+                symbol,
+                period=f"{lookback_days}d",
+                interval="1d",
+                auto_adjust=False,
+                progress=False,
+                threads=False,
+                session=cached_session,
+            )
             if hist.empty:
                 yf_error = str(yf_shared._ERRORS.get(symbol, "")).strip()
                 if yf_error:
@@ -304,8 +257,8 @@ def save_status(path: Path, status: dict) -> None:
 def send_primary_email_alert(subject: str, body_text: str, body_html: str) -> None:
     email_user = clean_env_value(os.getenv("EMAIL_USER"))
     email_pass = clean_env_value(os.getenv("EMAIL_PASS")) or clean_env_value(os.getenv("EMAIL_APP_PASSWORD"))
-    smtp_server = parse_str_env("SMTP_SERVER", "smtp.gmail.com")
-    smtp_port = parse_int_env("SMTP_PORT", 587)
+    smtp_server = os.getenv("SMTP_SERVER", "smtp.gmail.com")
+    smtp_port = int(os.getenv("SMTP_PORT", "587"))
     recipient = clean_env_value(os.getenv("ALERT_EMAIL_TO")) or clean_env_value(os.getenv("EMAIL_TO")) or email_user
 
     # Gmail app passwords are often copied in grouped chunks like "abcd efgh ijkl mnop".
@@ -338,9 +291,7 @@ def send_primary_email_alert(subject: str, body_text: str, body_html: str) -> No
 
     try:
         with smtplib.SMTP(smtp_server, smtp_port, timeout=20) as server:
-            server.ehlo()
             server.starttls()
-            server.ehlo()
             server.login(email_user, email_pass)
             server.send_message(msg)
     except smtplib.SMTPAuthenticationError as exc:
@@ -348,8 +299,6 @@ def send_primary_email_alert(subject: str, body_text: str, body_html: str) -> No
             "SMTP authentication failed. For Gmail, use an App Password (not your normal password), "
             "and ensure 2-Step Verification is enabled on the sender account."
         ) from exc
-    except smtplib.SMTPException as exc:
-        raise RuntimeError(f"SMTP send failed: {exc}") from exc
 
 
 def send_push(title: str, message: str, priority: int = 0, dry_run: bool = False) -> None:
@@ -384,18 +333,25 @@ def evaluate_alerts(snapshot: dict, status_path: Path, dry_run: bool = False, fo
     status = load_status(status_path)
     monitor = status.get("monitor_state", {})
 
+    below_streak = int(monitor.get("below_streak", 0))
+    dip_alert_active = bool(monitor.get("dip_alert_active", False))
     prev_state = monitor.get("last_state", "UNKNOWN")
     state = snapshot["state"]
-    state_changed = state != prev_state
 
-    # Muzzle rule: only notify on transitions, except explicit forced tests.
-    should_send_dip = (state_changed and state == "BELOW_THRESHOLD") or (force_notify and state == "BELOW_THRESHOLD")
-    should_send_recovery = (state_changed and state == "ABOVE_SMA") or (force_notify and state == "ABOVE_SMA")
+    if state == "BELOW_THRESHOLD":
+        below_streak += 1
+    else:
+        below_streak = 0
+
+    should_send_dip = (state == "BELOW_THRESHOLD" and below_streak >= 2 and not dip_alert_active) or (
+        force_notify and state == "BELOW_THRESHOLD"
+    )
+    should_send_recovery = (state == "ABOVE_SMA" and dip_alert_active) or (force_notify and state == "ABOVE_SMA")
 
     if should_send_dip:
-        subject = "[TQQQ] Dip Alert (confirmed across 2 runs)"
+        subject = "[QQQ] Dip Alert (confirmed across 2 runs)"
         body_text = (
-            "TQQQ dip confirmed.\n\n"
+            "QQQ dip confirmed.\n\n"
             f"Current Price: ${snapshot['price']:.2f}\n"
             f"200-day SMA: ${snapshot['sma_200']:.2f}\n"
             f"Dip Threshold (-3%): ${snapshot['dip_threshold']:.2f}\n"
@@ -403,7 +359,7 @@ def evaluate_alerts(snapshot: dict, status_path: Path, dry_run: bool = False, fo
             f"Current State: {state}\n"
         )
         body_html = (
-            "<h3>TQQQ Dip Confirmed</h3>"
+            "<h3>QQQ Dip Confirmed</h3>"
             f"<p><b>Current Price:</b> ${snapshot['price']:.2f}</p>"
             f"<p><b>200-day SMA:</b> ${snapshot['sma_200']:.2f}</p>"
             f"<p><b>Dip Threshold (-3%):</b> ${snapshot['dip_threshold']:.2f}</p>"
@@ -421,14 +377,12 @@ def evaluate_alerts(snapshot: dict, status_path: Path, dry_run: bool = False, fo
             # Primary immediate alert path.
             send_push(title=subject, message=push_message, priority=2, dry_run=False)
             # Secondary log/archive path.
-            try:
-                send_primary_email_alert(subject, body_text, body_html)
-            except Exception as exc:
-                print(f"Warning: secondary email send failed (dip alert): {exc}")
+            send_primary_email_alert(subject, body_text, body_html)
+        dip_alert_active = True
     elif should_send_recovery:
-        subject = "[TQQQ] Recovery Alert: crossed back above 200 SMA"
+        subject = "[QQQ] Recovery Alert: crossed back above 200 SMA"
         body_text = (
-            "TQQQ recovery alert.\n\n"
+            "QQQ recovery alert.\n\n"
             f"Current Price: ${snapshot['price']:.2f}\n"
             f"200-day SMA: ${snapshot['sma_200']:.2f}\n"
             f"Dip Threshold (-3%): ${snapshot['dip_threshold']:.2f}\n"
@@ -436,7 +390,7 @@ def evaluate_alerts(snapshot: dict, status_path: Path, dry_run: bool = False, fo
             f"Current State: {state}\n"
         )
         body_html = (
-            "<h3>TQQQ Recovery Alert</h3>"
+            "<h3>QQQ Recovery Alert</h3>"
             f"<p><b>Current Price:</b> ${snapshot['price']:.2f}</p>"
             f"<p><b>200-day SMA:</b> ${snapshot['sma_200']:.2f}</p>"
             f"<p><b>Dip Threshold (-3%):</b> ${snapshot['dip_threshold']:.2f}</p>"
@@ -454,19 +408,15 @@ def evaluate_alerts(snapshot: dict, status_path: Path, dry_run: bool = False, fo
             # Primary immediate alert path.
             send_push(title=subject, message=push_message, priority=0, dry_run=False)
             # Secondary log/archive path.
-            try:
-                send_primary_email_alert(subject, body_text, body_html)
-            except Exception as exc:
-                print(f"Warning: secondary email send failed (recovery alert): {exc}")
+            send_primary_email_alert(subject, body_text, body_html)
+        dip_alert_active = False
     else:
-        if state == "BELOW_THRESHOLD" and not state_changed:
-            print("No new alert: state remains BELOW_THRESHOLD (muzzle active).")
-        else:
-            print("No alert conditions matched for this run.")
+        print("No alert conditions matched for this run.")
 
     status["monitor_state"] = {
         "last_state": state,
-        "last_state_changed": state_changed,
+        "below_streak": below_streak,
+        "dip_alert_active": dip_alert_active,
         "last_price": snapshot["price"],
         "last_sma_200": snapshot["sma_200"],
         "last_threshold": snapshot["dip_threshold"],
@@ -503,13 +453,19 @@ def run_once(symbol: str, status_file: Path, dry_run: bool = False, force_dip_te
         f"rows={len(hist) if hist is not None else 'n/a'} | state={snapshot['state']}"
     )
     if force_dip_test:
-        print("Force dip test mode: bypassing transition muzzle for notification test.")
+        status = load_status(status_file)
+        monitor = status.get("monitor_state", {})
+        monitor["below_streak"] = 1
+        monitor["dip_alert_active"] = False
+        status["monitor_state"] = monitor
+        save_status(status_file, status)
+        print("Force dip test mode: seeded confirmation state, triggering immediate dip-confirmation path.")
     evaluate_alerts(snapshot, status_file, dry_run=dry_run, force_notify=force_dip_test)
 
 
 def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="TQQQ monitor with anti-rate-limit and alert confirmation logic.")
-    parser.add_argument("--symbol", default="TQQQ", help="Ticker symbol to monitor.")
+    parser = argparse.ArgumentParser(description="QQQ monitor with anti-rate-limit and alert confirmation logic.")
+    parser.add_argument("--symbol", default="QQQ", help="Ticker symbol to monitor.")
     parser.add_argument("--status-file", default="status.json", help="Path to status.json persistence file.")
     parser.add_argument("--dry-run", action="store_true", help="Do not send email; print alerts only.")
     parser.add_argument("--test", action="store_true", help="Alias of --dry-run for test simulation mode.")
@@ -524,11 +480,6 @@ def parse_args() -> argparse.Namespace:
 def main() -> None:
     args = parse_args()
     effective_dry_run = args.dry_run or args.test
-    # Rate-limit resilience: add startup jitter to avoid synchronized request bursts.
-    if not effective_dry_run and not args.force_dip_test:
-        delay = random.randint(0, 30)
-        print(f"Startup jitter: sleeping {delay}s before market fetch.")
-        time.sleep(delay)
     run_once(
         symbol=args.symbol,
         status_file=Path(args.status_file),

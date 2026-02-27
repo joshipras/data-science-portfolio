@@ -16,9 +16,9 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-APP_TITLE = "TQQQ Monitoring & Strategy Sandbox"
+APP_TITLE = "QQQ Monitoring & Strategy Sandbox"
 STATUS_PATH = Path(__file__).parent / "status.json"
-DATA_CACHE_PATH = Path(__file__).parent / "last_good_tqqq_data.csv"
+DATA_CACHE_PATH = Path(__file__).parent / "last_good_qqq_data.csv"
 
 
 def load_last_status() -> dict:
@@ -83,7 +83,7 @@ def load_data_cache() -> pd.DataFrame:
 
 
 @st.cache_data(ttl=60 * 60)
-def fetch_tqqq_data() -> pd.DataFrame:
+def fetch_qqq_data() -> pd.DataFrame:
     end = datetime.now(timezone.utc)
     start = end - timedelta(days=370)
     errors = []
@@ -91,7 +91,7 @@ def fetch_tqqq_data() -> pd.DataFrame:
     # Primary path: explicit date range.
     try:
         df = yf.download(
-            "TQQQ",
+            "QQQ",
             start=start.date(),
             end=end.date(),
             progress=False,
@@ -106,7 +106,7 @@ def fetch_tqqq_data() -> pd.DataFrame:
     if df.empty:
         time.sleep(1)
         try:
-            df = yf.Ticker("TQQQ").history(period="12mo", interval="1d", auto_adjust=False)
+            df = yf.Ticker("QQQ").history(period="12mo", interval="1d", auto_adjust=False)
         except Exception as exc:
             errors.append(f"Ticker.history(period) failed: {exc}")
             df = pd.DataFrame()
@@ -114,7 +114,7 @@ def fetch_tqqq_data() -> pd.DataFrame:
     # Secondary provider fallback: Stooq public daily CSV.
     if df.empty:
         try:
-            stooq_df = pd.read_csv("https://stooq.com/q/d/l/?s=tqqq.us&i=d")
+            stooq_df = pd.read_csv("https://stooq.com/q/d/l/?s=qqq.us&i=d")
             if not stooq_df.empty:
                 stooq_df["Date"] = pd.to_datetime(stooq_df["Date"], errors="coerce")
                 stooq_df = stooq_df.dropna(subset=["Date"]).sort_values("Date")
@@ -135,7 +135,7 @@ def fetch_tqqq_data() -> pd.DataFrame:
         return cached
 
     detail = "; ".join(errors) if errors else "No rows returned from Yahoo Finance."
-    raise ValueError(f"No market data returned for TQQQ and no local cache found. {detail}")
+    raise ValueError(f"No market data returned for QQQ and no local cache found. {detail}")
 
 
 def derive_status(price: float, sma_200: float, dip_threshold: float) -> tuple[str, str]:
@@ -186,7 +186,7 @@ def build_chart(df: pd.DataFrame, sandbox_price: float) -> go.Figure:
             high=clean["High"],
             low=clean["Low"],
             close=clean["Close"],
-            name="TQQQ",
+            name="QQQ",
         )
     )
     fig.add_trace(go.Scatter(x=clean["Date"], y=clean["SMA_200"], mode="lines", name="200 SMA"))
@@ -232,7 +232,7 @@ def build_chart(df: pd.DataFrame, sandbox_price: float) -> go.Figure:
     )
 
     fig.update_layout(
-        title="TQQQ Price, 200 SMA, and Dip Threshold",
+        title="QQQ Price, 200 SMA, and Dip Threshold",
         xaxis_title="Date",
         yaxis_title="Price (USD)",
         xaxis_rangeslider_visible=False,
@@ -264,12 +264,12 @@ def render_status_card(status_label: str, state_key: str, prev_state: str) -> No
 def main() -> None:
     st.set_page_config(page_title=APP_TITLE, layout="wide")
     st.title(APP_TITLE)
-    st.caption("Tracks TQQQ vs. 200-day SMA with a sandbox price tester and email connectivity check.")
+    st.caption("Tracks QQQ vs. 200-day SMA with a sandbox price tester and email connectivity check.")
 
     try:
-        df = fetch_tqqq_data()
+        df = fetch_qqq_data()
     except Exception as exc:
-        st.error(f"Could not load TQQQ data right now: {exc}")
+        st.error(f"Could not load QQQ data right now: {exc}")
         st.info("This is usually temporary (Yahoo rate limit). Please refresh in a minute.")
         st.stop()
     if DATA_CACHE_PATH.exists():
@@ -303,9 +303,9 @@ def main() -> None:
     if st.sidebar.button("Send Test Email", use_container_width=True):
         ok, message = send_test_email(
             recipient=recipient,
-            subject="TQQQ Monitor: SMTP Connection Test",
+            subject="QQQ Monitor: SMTP Connection Test",
             body=(
-                "This is a real test email sent from the Streamlit TQQQ monitor app.\n\n"
+                "This is a real test email sent from the Streamlit QQQ monitor app.\n\n"
                 f"Sandbox price: ${float(sandbox_price):.2f}\n"
                 f"200 SMA: ${latest_sma:.2f}\n"
                 f"Dip threshold: ${latest_threshold:.2f}\n"
@@ -328,7 +328,7 @@ def main() -> None:
         st.markdown("### Key Metrics")
         metrics_df = pd.DataFrame(
             [
-                {"Metric": "Current TQQQ Price", "Value": f"${latest_close:.2f}"},
+                {"Metric": "Current QQQ Price", "Value": f"${latest_close:.2f}"},
                 {"Metric": "200 SMA Value", "Value": f"${latest_sma:.2f}"},
                 {"Metric": "Distance to Threshold (%)", "Value": f"{distance_to_threshold_pct:.2f}%"},
             ]
@@ -336,7 +336,7 @@ def main() -> None:
         st.dataframe(metrics_df, hide_index=True, use_container_width=True)
         st.caption(
             "Current values are based on the latest market close from yfinance "
-            "(expected near $50.06 for Feb 20, 2026 if that is the latest session)."
+            "(for QQQ, based on the latest available session)."
         )
 
 

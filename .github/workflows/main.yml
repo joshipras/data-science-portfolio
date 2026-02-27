@@ -1,4 +1,4 @@
-name: TQQQ Monitor
+name: QQQ Monitor
 
 on:
   workflow_dispatch:
@@ -13,6 +13,7 @@ jobs:
     defaults:
       run:
         working-directory: stock-monitoring-app
+
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -68,7 +69,7 @@ jobs:
           ALERT_EMAIL_TO: ${{ secrets.ALERT_EMAIL_TO }}
           SMTP_SERVER: ${{ secrets.SMTP_SERVER }}
           SMTP_PORT: ${{ secrets.SMTP_PORT }}
-        run: python monitor_tqqq.py $MONITOR_ARGS
+        run: python monitor_qqq.py $MONITOR_ARGS
 
       - name: Commit status.json
         if: success() && (github.ref_name == 'master' || github.ref_name == 'main')
