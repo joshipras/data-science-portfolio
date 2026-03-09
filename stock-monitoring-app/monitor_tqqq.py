@@ -210,10 +210,10 @@ def fetch_market_snapshot(symbol: str, lookback_days: int = 250) -> tuple[dict, 
 
             live_price = float(hist["Close"].iloc[-1])
             sma_200 = float(hist["Close"].rolling(window=200).mean().iloc[-1])
-            dip_threshold = sma_200 * 0.97
+            dip_threshold = sma_200 * 0.95
             if live_price <= dip_threshold:
                 state = "BELOW_THRESHOLD"
-            elif live_price >= sma_200:
+            elif live_price >= (sma_200 * 1.03):
                 state = "ABOVE_SMA"
             else:
                 state = "BETWEEN_THRESHOLD_AND_SMA"
@@ -243,10 +243,10 @@ def fetch_market_snapshot(symbol: str, lookback_days: int = 250) -> tuple[dict, 
             hist = fetch_from_stooq(symbol, lookback_days)
         live_price = float(hist["Close"].iloc[-1])
         sma_200 = float(hist["Close"].rolling(window=200).mean().iloc[-1])
-        dip_threshold = sma_200 * 0.97
+        dip_threshold = sma_200 * 0.95
         if live_price <= dip_threshold:
             state = "BELOW_THRESHOLD"
-        elif live_price >= sma_200:
+        elif live_price >= (sma_200 * 1.03):
             state = "ABOVE_SMA"
         else:
             state = "BETWEEN_THRESHOLD_AND_SMA"
@@ -376,12 +376,12 @@ def evaluate_alerts(snapshot: dict, status_path: Path, dry_run: bool = False, fo
     should_send_recovery = (state == "ABOVE_SMA" and dip_alert_active) or (force_notify and state == "ABOVE_SMA")
 
     if should_send_dip:
-        subject = "[QQQ] Dip Alert (confirmed across 2 runs)"
+        subject = "[QQQ] Dip Alert (5% below 200 SMA)"
         body_text = (
             "QQQ dip confirmed.\n\n"
             f"Current Price: ${snapshot['price']:.2f}\n"
             f"200-day SMA: ${snapshot['sma_200']:.2f}\n"
-            f"Dip Threshold (-3%): ${snapshot['dip_threshold']:.2f}\n"
+            f"Dip Threshold (-5%): ${snapshot['dip_threshold']:.2f}\n"
             f"Previous State: {prev_state}\n"
             f"Current State: {state}\n"
         )
@@ -389,7 +389,7 @@ def evaluate_alerts(snapshot: dict, status_path: Path, dry_run: bool = False, fo
             "<h3>QQQ Dip Confirmed</h3>"
             f"<p><b>Current Price:</b> ${snapshot['price']:.2f}</p>"
             f"<p><b>200-day SMA:</b> ${snapshot['sma_200']:.2f}</p>"
-            f"<p><b>Dip Threshold (-3%):</b> ${snapshot['dip_threshold']:.2f}</p>"
+            f"<p><b>Dip Threshold (-5%):</b> ${snapshot['dip_threshold']:.2f}</p>"
             f"<p><b>Previous State:</b> {prev_state}</p>"
             f"<p><b>Current State:</b> {state}</p>"
         )
@@ -407,12 +407,13 @@ def evaluate_alerts(snapshot: dict, status_path: Path, dry_run: bool = False, fo
             send_primary_email_alert(subject, body_text, body_html)
         dip_alert_active = True
     elif should_send_recovery:
-        subject = "[QQQ] Recovery Alert: crossed back above 200 SMA"
+        subject = "[QQQ] Recovery Alert: 3% above 200 SMA"
         body_text = (
             "QQQ recovery alert.\n\n"
             f"Current Price: ${snapshot['price']:.2f}\n"
             f"200-day SMA: ${snapshot['sma_200']:.2f}\n"
-            f"Dip Threshold (-3%): ${snapshot['dip_threshold']:.2f}\n"
+            f"Dip Threshold (-5%): ${snapshot['dip_threshold']:.2f}\n"
+            f"Recovery Trigger (+3%): ${(snapshot['sma_200'] * 1.03):.2f}\n"
             f"Previous State: {prev_state}\n"
             f"Current State: {state}\n"
         )
@@ -420,12 +421,13 @@ def evaluate_alerts(snapshot: dict, status_path: Path, dry_run: bool = False, fo
             "<h3>QQQ Recovery Alert</h3>"
             f"<p><b>Current Price:</b> ${snapshot['price']:.2f}</p>"
             f"<p><b>200-day SMA:</b> ${snapshot['sma_200']:.2f}</p>"
-            f"<p><b>Dip Threshold (-3%):</b> ${snapshot['dip_threshold']:.2f}</p>"
+            f"<p><b>Dip Threshold (-5%):</b> ${snapshot['dip_threshold']:.2f}</p>"
+            f"<p><b>Recovery Trigger (+3%):</b> ${(snapshot['sma_200'] * 1.03):.2f}</p>"
             f"<p><b>Previous State:</b> {prev_state}</p>"
             f"<p><b>Current State:</b> {state}</p>"
         )
         push_message = (
-            f"{snapshot['symbol']} RECOVERY: ${snapshot['price']:.2f} above 200 SMA ${snapshot['sma_200']:.2f}. "
+            f"{snapshot['symbol']} RECOVERY: ${snapshot['price']:.2f} is >= +3% above SMA (${(snapshot['sma_200'] * 1.03):.2f}). "
             "Check dashboard."
         )
         if dry_run:
@@ -456,7 +458,7 @@ def build_forced_dip_snapshot(symbol: str, status_file: Path) -> dict:
     status = load_status(status_file)
     monitor = status.get("monitor_state", {})
     baseline_sma = float(monitor.get("last_sma_200", 50.0))
-    dip_threshold = baseline_sma * 0.97
+    dip_threshold = baseline_sma * 0.95
     forced_price = max(0.01, dip_threshold * 0.995)
     return {
         "symbol": symbol,
