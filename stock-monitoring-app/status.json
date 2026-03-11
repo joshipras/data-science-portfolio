@@ -5,12 +5,12 @@
   "dip_threshold": 46.09646222,
   "updated_at_utc": "2026-02-22T00:31:34.809619Z",
   "monitor_state": {
-    "last_state": "ABOVE_SMA",
+    "last_state": "BETWEEN_THRESHOLD_AND_SMA",
     "below_streak": 0,
     "dip_alert_active": false,
-    "last_price": 608.3599853515625,
-    "last_sma_200": 590.2033990478516,
-    "last_threshold": 560.693229095459,
-    "updated_at_utc": "2026-03-11T17:09:10.075485Z"
+    "last_price": 606.8200073242188,
+    "last_sma_200": 590.1956991577149,
+    "last_threshold": 560.6859141998291,
+    "updated_at_utc": "2026-03-11T18:00:38.292371Z"
   }
 }
