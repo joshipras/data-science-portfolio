@@ -21,21 +21,22 @@ jobs:
       FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
     environment:
       name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
+      url: https://joshipras.github.io/data-science-portfolio/
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Remove CNAME files
+      - name: Nuclear reset for Pages artifact
+        working-directory: ml-sd-flashcards
         run: |
-          rm -f CNAME
-          rm -f ml-sd-flashcards/CNAME
+          rm -rf CNAME
+          touch .nojekyll
 
-      - name: Upload Pages artifact
+      - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
         with:
-          path: ml-sd-flashcards
+          path: ml-sd-flashcards/
 
       - name: Deploy to GitHub Pages
         id: deployment
