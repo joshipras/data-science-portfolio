@@ -1,0 +1,196 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Marketplace Interview Coach</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <div class="app-shell">
+      <header class="hero">
+        <div class="hero-copy">
+          <p class="eyebrow">Static, offline, GitHub Pages-ready</p>
+          <h1>Marketplace Interview Coach</h1>
+          <p class="subtitle">
+            Flashcards for Data Scientists and MLEs preparing for Uber, Lyft,
+            Grubhub, and Netflix-style interviews with just enough Operations
+            Research thinking to stand out.
+          </p>
+        </div>
+
+        <div class="hero-stats">
+          <div class="stat-chip">
+            <span>Mode</span>
+            <strong id="mode-label">Daily Review</strong>
+          </div>
+          <div class="stat-chip">
+            <span>Queue</span>
+            <strong id="queue-count">0 cards</strong>
+          </div>
+          <div class="stat-chip">
+            <span>Streak</span>
+            <strong id="streak-count">0 days</strong>
+          </div>
+        </div>
+      </header>
+
+      <main class="layout">
+        <section class="main-column">
+          <nav class="mode-bar" aria-label="Study modes">
+            <button class="mode-btn is-active" data-mode="review">Daily Review</button>
+            <button class="mode-btn" data-mode="interview">Interview Mode</button>
+            <button class="mode-btn" data-mode="weak">Weak Areas</button>
+            <button class="mode-btn" data-mode="browse">Browse All</button>
+          </nav>
+
+          <section class="panel flashcard-panel">
+            <div class="panel-top">
+              <div>
+                <span id="card-topic" class="topic-pill">Loading</span>
+                <h2 id="card-question">Preparing your interview deck...</h2>
+              </div>
+              <div class="position-wrap">
+                <span id="card-position">0 / 0</span>
+              </div>
+            </div>
+
+            <div class="flashcard-wrap">
+              <button id="flashcard" class="flashcard" aria-live="polite">
+                <div class="flashcard-face flashcard-front">
+                  <span class="face-label">Question</span>
+                  <div id="front-content" class="card-copy"></div>
+                </div>
+                <div class="flashcard-face flashcard-back">
+                  <span class="face-label">Strong Answer</span>
+                  <div id="back-content" class="card-copy"></div>
+                </div>
+              </button>
+            </div>
+
+            <div class="action-row">
+              <button id="prev-btn" class="ghost-btn">Previous</button>
+              <button id="flip-btn" class="primary-btn">Reveal Answer</button>
+              <button id="next-btn" class="ghost-btn">Next</button>
+            </div>
+
+            <div id="interview-timer" class="timer-strip hidden"></div>
+
+            <div id="rating-panel" class="rating-panel hidden">
+              <button class="rating-btn again" data-rating="1">1 Again</button>
+              <button class="rating-btn hard" data-rating="2">2 Hard</button>
+              <button class="rating-btn good" data-rating="3">3 Good</button>
+              <button class="rating-btn easy" data-rating="4">4 Easy</button>
+            </div>
+
+            <div class="shortcut-row">
+              <span>`Space` reveal</span>
+              <span>`←` / `→` navigate</span>
+              <span>`1-4` rate</span>
+            </div>
+          </section>
+
+          <section class="panel research-panel">
+            <div class="section-head">
+              <div>
+                <p class="eyebrow">Research distilled</p>
+                <h3>What These Interviews Usually Reward</h3>
+              </div>
+            </div>
+
+            <div class="research-grid">
+              <article class="insight-card">
+                <h4>SQL is table stakes</h4>
+                <p>
+                  Strong candidates move comfortably from raw event logs to
+                  business metrics, especially with time windows, cohorts, and
+                  marketplace joins.
+                </p>
+              </article>
+              <article class="insight-card">
+                <h4>Marketplace experiments are tricky</h4>
+                <p>
+                  Two-sided systems create interference, delayed effects, and
+                  metric tradeoffs. Good answers mention switchbacks, guardrails,
+                  and downstream behavior shifts.
+                </p>
+              </article>
+              <article class="insight-card">
+                <h4>Product thinking beats textbook math</h4>
+                <p>
+                  The best answers sound operational: what changed, where is the
+                  bottleneck, who is affected, and what decision would you make
+                  next.
+                </p>
+              </article>
+              <article class="insight-card">
+                <h4>OR is most useful as intuition</h4>
+                <p>
+                  Queueing, matching, resource allocation, and feedback loops
+                  help you frame problems more sharply without needing proofs.
+                </p>
+              </article>
+            </div>
+          </section>
+        </section>
+
+        <aside class="side-column">
+          <section class="panel dashboard-panel">
+            <div class="section-head">
+              <div>
+                <p class="eyebrow">Progress</p>
+                <h3>Dashboard</h3>
+              </div>
+            </div>
+
+            <div class="metric-grid">
+              <div class="metric-card">
+                <span>Mastered</span>
+                <strong id="mastered-count">0</strong>
+              </div>
+              <div class="metric-card">
+                <span>Due Today</span>
+                <strong id="due-count">0</strong>
+              </div>
+              <div class="metric-card">
+                <span>New Left</span>
+                <strong id="new-left-count">7</strong>
+              </div>
+              <div class="metric-card">
+                <span>Unlocked</span>
+                <strong id="unlocked-count">0</strong>
+              </div>
+            </div>
+
+            <div class="mini-block">
+              <h4>Topic Strength</h4>
+              <canvas id="topic-canvas" width="360" height="200"></canvas>
+            </div>
+
+            <div class="mini-block">
+              <h4>7-Day Activity</h4>
+              <canvas id="activity-canvas" width="360" height="180"></canvas>
+            </div>
+
+            <div class="weak-topic-box">
+              <span>Weakest topic</span>
+              <strong id="weak-topic">-</strong>
+            </div>
+          </section>
+
+          <section class="panel queue-panel">
+            <div class="section-head">
+              <div>
+                <p class="eyebrow">Today</p>
+                <h3>Study Queue</h3>
+              </div>
+            </div>
+            <div id="queue-list" class="queue-list"></div>
+          </section>
+        </aside>
+      </main>
+    </div>
+
+    <script src="app.js"></script>
+  </body>
+</html>
