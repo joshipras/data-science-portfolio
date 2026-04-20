@@ -8,9 +8,9 @@
     "last_state": "ABOVE_SMA",
     "below_streak": 0,
     "dip_alert_active": false,
-    "last_price": 646.0050048828125,
-    "last_sma_200": 599.3643746948242,
-    "last_threshold": 569.396155960083,
-    "updated_at_utc": "2026-04-20T18:39:58.175532Z"
+    "last_price": 646.2501220703125,
+    "last_sma_200": 599.3656002807617,
+    "last_threshold": 569.3973202667236,
+    "updated_at_utc": "2026-04-20T19:42:56.958942Z"
   }
 }
